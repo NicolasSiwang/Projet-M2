@@ -1,4 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from rouge_score import rouge_scorer
+import pandas as pd
 
 def summarize(text, model_name="legal-pegasus", min_length=150, max_length=250):
     """Return a summary"""
@@ -21,3 +23,28 @@ def summarize(text, model_name="legal-pegasus", min_length=150, max_length=250):
     else:
         return "Model not available"
     
+def evaluation(text, ref):
+    rouges = rouge_evaluations(text, ref)
+    
+def rouge_evaluations(text, ref):
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+    scores = scorer.score(text, ref)
+
+    return rouge_to_df(scores)
+
+def rouge_to_df(scores):
+    
+    data = {
+        'Metric': [],
+        'Precision': [],
+        'Recall': [],
+        'F1-Score': []
+    }
+
+    for metric, score in scores.items():
+        data['Metric'].append(metric)
+        data['Precision'].append(score.precision)
+        data['Recall'].append(score.recall)
+        data['F1-Score'].append(score.fmeasure)
+
+    return pd.DataFrame(data)
