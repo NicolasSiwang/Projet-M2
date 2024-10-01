@@ -1,5 +1,6 @@
 SCOTUS/
 models/
+data_txt_save/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
