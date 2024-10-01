@@ -1,6 +1,33 @@
+from nltk.tokenize import sent_tokenize
+import spacy
+import custom_spacy as csp
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from rouge_score import rouge_scorer
 import pandas as pd
+
+def sent_segmentation(document, method='nltk'):
+    """Segmentation of the document as sentences using the specified method.
+    
+    Args:
+        document (str): The document to segment.
+        method (str): The method to use for segmentation ('nltk', 'spacy', 'custom_spacy').
+        
+    Returns:
+        List[str]: A list of tokenized sentences.
+    """
+    if method == 'nltk':
+        return sent_tokenize(document)
+    elif method == 'spacy':
+        nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        nlp.add_pipe("sentencizer") 
+        doc = nlp(document)
+        return [sent.text for sent in doc.sents]
+    elif method == 'custom_spacy':
+        nlp = csp.custom_spacy_model()
+        doc = nlp(document)
+        return [sent.text for sent in doc.sents]
+    else:
+        raise ValueError("Unsupported tokenization method. Choose 'nltk', 'spacy', or 'custom_spacy'.")
 
 def summarize(text, model_name="legal-pegasus", min_length=150, max_length=250):
     """Return a summary"""
