@@ -11,6 +11,16 @@ from nltk.tokenize import word_tokenize
 from rouge_score import rouge_scorer
 import pandas as pd
 import numpy as np
+import json
+import re
+
+def open_file(file_path, type):
+    
+    with open(file_path, 'r', encoding="utf-8") as f:
+        if (type == "json"):
+            return json.load(f)
+        elif (type == "txt"):
+            return f.read()
 
 def sent_segmentation(document, method='nltk'):
     """Segmentation of the document as sentences using the specified method.
@@ -27,12 +37,24 @@ def sent_segmentation(document, method='nltk'):
     elif method == 'spacy':
         nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
         nlp.add_pipe("sentencizer") 
-        doc = nlp(document)
-        return [sent.text for sent in doc.sents]
+        split_doc = split(document)
+        sentences = []
+        for chunk in split_doc:
+            chunk = re.sub(r'\"', '', chunk)    # remove double quote because error
+            doc = nlp(chunk)
+            for sent in doc.sents:
+                sentences.append(sent.text)
+        return sentences
     elif method == 'custom_spacy':
         nlp = csp.custom_spacy_model()
-        doc = nlp(document)
-        return [sent.text for sent in doc.sents]
+        split_doc = split(document)
+        sentences = []
+        for chunk in split_doc:
+            chunk = re.sub(r'\"', '', chunk)    # remove double quote because error
+            doc = nlp(chunk)
+            for sent in doc.sents:
+                sentences.append(sent.text)
+        return sentences
     elif method == 'pySBD':        
         seg = pysbd.Segmenter(language="en", clean=False)
         return seg.segment(document)
@@ -76,7 +98,7 @@ def bb25LegalSum(sentences, model_name="bert-base-uncased", n_clusters = 5):
         cluster[i] = []
         for j, sentence in enumerate(sentences):
             if labels[j] == i:
-                print(f"- {sentence}")
+                #print(f"- {sentence}")
                 cluster[i].append(sentence)
                 
     silhouette_avg = silhouette_score(sentence_embeddings, labels)
@@ -131,6 +153,28 @@ def get_sentence_embeddings(sentences, tokenizer, model):
         outputs = model(**inputs)
         embeddings.append(outputs.last_hidden_state.mean(dim=1).squeeze().detach().numpy())  # Moyenne des embeddings
     return np.array(embeddings)
+
+def split(text, max_length=3530): 
+    split_text = text.split('\n')
+    result = []
+    
+    for chunk in split_text:
+        while len(chunk) > max_length:
+            sub_chunk = chunk[:max_length]
+            last_period_position = sub_chunk.rfind('.')
+            
+            if last_period_position == -1:
+                last_period_position = max_length
+            
+            if chunk[:last_period_position+1].strip():
+                result.append(chunk[:last_period_position+1].strip())
+            chunk = chunk[last_period_position+1:].strip()
+        
+        if chunk and chunk.strip():
+            result.append(chunk.strip())
+                
+    return result
+
     
 def evaluation(text, ref):
     rouges = rouge_evaluations(text, ref)
