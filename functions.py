@@ -201,3 +201,56 @@ def rouge_to_df(scores):
         data['F1-Score'].append(score.fmeasure)
 
     return pd.DataFrame(data)
+
+def highlight_html(full_text, extracts):
+    '''The extrats is a list of fragments of full_text. Highlight them in full_text, which is an HTML.'''
+
+    highlighted_text = full_text
+
+    for extract in extracts:
+        # Skip empty strings
+        if extract.strip() == "":
+            continue
+
+        # Normalize the extract_text by collapsing whitespace
+        normalized_extract = re.sub(r'\s+', ' ', extract.strip())
+
+        # Find the first occurrence of the extract_text in the full_text
+        pattern = re.compile(re.escape(normalized_extract), re.IGNORECASE)
+
+        match = pattern.search(highlighted_text)
+        if match:
+            start_index, end_index = match.span()
+            
+            # Check if the match is within HTML tags (excluding 'a' and 'em' tags)
+            if (highlighted_text.rfind('<', 0, start_index) == -1 or
+                highlighted_text.rfind('>', 0, start_index) > highlighted_text.rfind('<', 0, start_index) or
+                re.search(r'<(a|em)>', highlighted_text[start_index:end_index])):
+
+                # Highlight the first occurrence of the text outside disallowed tags
+                highlighted_text = (highlighted_text[:start_index] +
+                                    f'<span style="background-color: yellow; color: black; font-weight: bold;">{match.group(0)}</span>' +
+                                    highlighted_text[end_index:])
+
+    return highlighted_text
+
+def highlight_text(full_text, extracts):
+    '''The extrats is a list of fragments of full_text. Highlight them in full_text, which is a text.'''
+
+    # Highlight occurrences of each extract in the full text
+    highlighted_text = full_text
+    for extract in extracts:
+        if extract:
+            # This pattern handles the case where extracts may include new lines or spaces
+            pattern = re.escape(extract).replace(r'\ ', r'\s*')  # Allow for variable whitespace
+            
+            # Use re.search to find the first occurrence
+            match = re.search(pattern, highlighted_text, flags=re.IGNORECASE)
+            if match:
+                start_index, end_index = match.span()
+                # Highlight the first occurrence
+                highlighted_text = (highlighted_text[:start_index] +
+                                    f'<span style="background-color: yellow; color: black;">{highlighted_text[start_index:end_index]}</span>' +
+                                    highlighted_text[end_index:])
+
+    return highlighted_text
