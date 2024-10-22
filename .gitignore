@@ -3,6 +3,7 @@ models/
 data_txt_save/
 clean_data_txt_save/
 summaries/
+dataset_legal-pegasus/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
