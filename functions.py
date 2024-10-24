@@ -13,6 +13,10 @@ import pandas as pd
 import numpy as np
 import json
 import re
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+import matplotlib.pyplot as plt
 
 def open_file(file_path, type):
     
@@ -80,11 +84,48 @@ def summarize(text, model_name="legal-pegasus", min_length=150, max_length=250):
         return [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids][0]
     else:
         return "Model not available"
+
+def PCA_kmeans_optimal_clusters(sentence_embeddings, max_clusters=7):
+    """
+    Applique une analyse en composantes principales (PCA) et un K-Means 
+    pour déterminer le nombre optimal de clusters.
+    """
+    # Réduire la dimensionnalité avec PCA (par exemple, à 2 ou 3 dimensions)
+    pca = PCA(n_components=2)
+    reduced_embeddings = pca.fit_transform(sentence_embeddings)
     
-def bb25LegalSum(sentences, model_name="bert-base-uncased", n_clusters = 5):
+    silhouette_scores = []
+    k_values = list(range(2, max_clusters + 1))
+    
+    # Tester différents nombres de clusters
+    for k in k_values:
+        kmeans = KMeans(n_clusters=k, random_state=0)
+        labels = kmeans.fit_predict(reduced_embeddings)
+        score = silhouette_score(reduced_embeddings, labels)
+        silhouette_scores.append(score)
+    
+    # Trouver la valeur de k avec le meilleur score de silhouette
+    optimal_k = k_values[silhouette_scores.index(max(silhouette_scores))]
+    
+    # Afficher le graphe du score de silhouette
+    # plt.figure()
+    # plt.plot(k_values, silhouette_scores, marker='o')
+    # plt.xlabel('Nombre de clusters (k)')
+    # plt.ylabel('Score de silhouette')
+    # plt.title('Détermination du nombre optimal de clusters')
+    # plt.show()
+    
+    return optimal_k
+    
+def bb25LegalSum(sentences, model_name="bert-base-uncased"):
     tokenizer = BertTokenizer.from_pretrained(model_name)
     model = BertModel.from_pretrained(model_name)
     sentence_embeddings = get_sentence_embeddings(sentences, tokenizer, model)
+
+    # Déterminer le nombre optimal de clusters
+    print("Appel pca")
+    n_clusters = PCA_kmeans_optimal_clusters(sentence_embeddings)
+    print("fin pca")
       
     kmeans = KMeans(n_clusters=n_clusters, random_state=0)
     kmeans.fit(sentence_embeddings)
