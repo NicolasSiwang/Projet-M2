@@ -183,24 +183,7 @@ def rouge_evaluations(text, ref):
     scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
     scores = scorer.score(text, ref)
 
-    return rouge_to_df(scores)
-
-def rouge_to_df(scores):
-    
-    data = {
-        'Metric': [],
-        'Precision': [],
-        'Recall': [],
-        'F1-Score': []
-    }
-
-    for metric, score in scores.items():
-        data['Metric'].append(metric)
-        data['Precision'].append(score.precision)
-        data['Recall'].append(score.recall)
-        data['F1-Score'].append(score.fmeasure)
-
-    return pd.DataFrame(data)
+    return [scores['rouge1'].fmeasure, scores['rouge2'].fmeasure, scores['rougeL'].fmeasure]
 
 def highlight_html(full_text, extracts):
     '''The extrats is a list of fragments of full_text. Highlight them in full_text, which is an HTML.'''
