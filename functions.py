@@ -17,6 +17,8 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
+import nltk.translate.bleu_score as bleu
+import evaluate
 
 def open_file(file_path, type):
     
@@ -225,21 +227,28 @@ def rouge_evaluations(text, ref):
     return rouge_to_df(scores)
 
 def rouge_to_df(scores):
-    
-    data = {
-        'Metric': [],
-        'Precision': [],
-        'Recall': [],
-        'F1-Score': []
-    }
-
-    for metric, score in scores.items():
-        data['Metric'].append(metric)
-        data['Precision'].append(score.precision)
-        data['Recall'].append(score.recall)
-        data['F1-Score'].append(score.fmeasure)
-
+    data = [
+        {'Metric': metric, 'Precision': score.precision, 'Recall': score.recall, 'F1-Score': score.fmeasure}
+        for metric, score in scores.items()
+    ]
     return pd.DataFrame(data)
+
+def bleu_evaluations(text, ref):
+    metrics = {
+        "bleu": evaluate.load("bleu"),
+        "google_bleu": evaluate.load("google_bleu")
+    }
+    
+    results = {
+        name: metric.compute(predictions=text, references=ref).get(name, None)
+        for name, metric in metrics.items()
+    }
+    return bleu_to_df(results)
+
+def bleu_to_df(results):
+    data = [{"Metric": metric, "Score": score} for metric, score in results.items()]
+    return pd.DataFrame(data)
+
 
 def highlight_html(full_text, extracts):
     '''The extrats is a list of fragments of full_text. Highlight them in full_text, which is an HTML.'''
