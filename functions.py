@@ -16,8 +16,6 @@ import re
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-import matplotlib.pyplot as plt
-import nltk.translate.bleu_score as bleu
 import evaluate
 
 def open_file(file_path, type):
