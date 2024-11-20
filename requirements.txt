@@ -1,0 +1,14 @@
+numpy
+json
+spacy
+pandas
+rank_bm25
+sklearn
+bs4
+nltk
+pysbd
+transformers
+rouge-score
+torch
+evaluate
+datasets
