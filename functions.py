@@ -116,16 +116,14 @@ def PCA_kmeans_optimal_clusters(sentence_embeddings, max_clusters=7):
     # plt.show()
     
     return optimal_k
-    
-def bb25LegalSum(sentences, model_name="bert-base-uncased"):
+
+def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal rights"):
     tokenizer = BertTokenizer.from_pretrained(model_name)
     model = BertModel.from_pretrained(model_name)
     sentence_embeddings = get_sentence_embeddings(sentences, tokenizer, model)
 
     # Déterminer le nombre optimal de clusters
-    print("Appel pca")
     n_clusters = PCA_kmeans_optimal_clusters(sentence_embeddings)
-    print("fin pca")
       
     kmeans = KMeans(n_clusters=n_clusters, random_state=0)
     kmeans.fit(sentence_embeddings)
@@ -133,48 +131,47 @@ def bb25LegalSum(sentences, model_name="bert-base-uncased"):
     # Étiquettes des clusters
     labels = kmeans.labels_
     
-    cluster = {}
-    for i in range(n_clusters):
-        #print(f"\nCluster {i+1}:")
-        cluster[i] = []
-        for j, sentence in enumerate(sentences):
-            if labels[j] == i:
-                #print(f"- {sentence}")
-                cluster[i].append(sentence)
+    clusters = {i: [] for i in range(n_clusters)}
+    for i, sentence in enumerate(sentences):
+        clusters[labels[i]].append(sentence.replace('\xa0', ' '))
                 
     silhouette_avg = silhouette_score(sentence_embeddings, labels)
-    #print(f"\nSilhouette Score: {silhouette_avg}")
+    print(f"Silhouette Score: {silhouette_avg}")
     
-    tokenized_clusters = {}
+    # Filtrer les clusters de phrases très courtes
+    def is_valid_cluster(cluster_sentences, min_length=5):
+        """Checks if a cluster is valid based on average sentence length."""
+        avg_length = sum(len(sentence.split()) for sentence in cluster_sentences) / len(cluster_sentences)
+        return avg_length >= min_length
+    
+    filtered_clusters = {
+        cluster_id: cluster_sentences
+        for cluster_id, cluster_sentences in clusters.items()
+        if is_valid_cluster(cluster_sentences)
+    }
 
-    # Tokenisation des documents pour chaque cluster
-    for i, sentences in cluster.items():
-        tokenized_clusters[i] = [word_tokenize(sentence.lower()) for sentence in sentences]
+    # Tokenization des clusters filtrés
+    tokenized_clusters = {
+        cluster_id: [word_tokenize(sentence) for sentence in cluster_sentences]
+        for cluster_id, cluster_sentences in filtered_clusters.items()
+    }
 
     # Initialiser un modèle BM25 pour chaque cluster
-    bm25_models = {}
-    for i, tokenized_docs in tokenized_clusters.items():
-        bm25_models[i] = BM25Okapi(tokenized_docs)
+    bm25_models = {
+        cluster_id: BM25Okapi(tokenized_docs)
+        for cluster_id, tokenized_docs in tokenized_clusters.items()
+    }
     
-    query = "law and legal rights"
-    tokenized_query = word_tokenize(query.lower())   
-     
-    for cluster_id, bm25 in bm25_models.items():
-        # Calcul des scores pour la requête dans chaque cluster
-        scores = bm25.get_scores(tokenized_query)
-        
-        
+    tokenized_query = word_tokenize(query)
     best_sentences = []
 
     for cluster_id, bm25 in bm25_models.items():
-            # Récupérer les phrases les plus pertinentes pour la requête dans ce cluster
-            top_docs = bm25.get_top_n(tokenized_query, tokenized_clusters[cluster_id], n=2)
+        # Récupérer les phrases les plus pertinentes pour la requête dans ce cluster
+        top_docs = bm25.get_top_n(tokenized_query, clusters[cluster_id], n=5)  # Use original sentences
 
-            # Extraire les phrases pertinentes et les ajouter à la liste
-            for doc in top_docs:
-                sentence = ' '.join(doc)  # Convertir le tokenized doc en phrase
-                best_sentences.append(sentence)
-
+        # Add relevant sentences to the list
+        best_sentences.extend(top_docs)
+            
     return best_sentences
 
 def get_sentence_embeddings(sentences, tokenizer, model):
@@ -214,6 +211,57 @@ def split(text, max_length=3530):
                 
     return result
 
+def contains_date_format(text):
+    # Define the regex pattern for [Month Day, Year]
+    pattern = r'\[\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b\]'
+    
+    # Search for the pattern in the text
+    match = re.search(pattern, text)
+    return bool(match)
+
+def is_title(text):
+    if text.strip() in ["I", "A"] :
+        return True
+    
+    return False
+
+def select_query(text):
+    query = ""
+    
+    lines = text.split('\n')
+    
+    for i, line in enumerate(lines):
+        line = line.strip()         
+        if line.startswith("No.") and i + 1 < len(lines):
+            if "Per Curiam" not in lines[i + 1].strip():
+                return sent_segmentation(lines[i + 1], "pySBD")[0]
+            elif i + 2 < len(lines):
+                return sent_segmentation(lines[i + 2], "pySBD")[0]
+        if "Syllabus" in line and i + 1 < len(lines):
+            query = lines[i + 1]
+            
+        # if there is a date like [Month day, year], we take :
+        # - the next line if it is not a title
+        # - else the line following the title
+            
+        if contains_date_format(line) and i + 2 < len(lines):
+            next_index = i + 2
+            next_line = lines[next_index]
+            while is_title(next_line) and next_index < len(lines + 1) :
+                next_index += 1
+                next_line = lines[next_index]
+            
+                
+            if is_title(lines[i + 2]) and i + 3 < len(lines):
+                if lines[i + 3].strip() == "A" and i + 4 < len(lines):
+                    return sent_segmentation(lines[i + 4], "pySBD")[0]  
+                return sent_segmentation(lines[i + 3], "pySBD")[0]  
+            return sent_segmentation(lines[i + 2], "pySBD")[0]   
+    
+    if query != "":
+        return sent_segmentation(query, "pySBD")[0]
+    else:
+        return "law and legal rights"
     
 def evaluation(text, ref):
     rouges = rouge_evaluations(text, ref)
@@ -226,9 +274,13 @@ def rouge_evaluations(text, ref):
 
 def rouge_to_df(scores):
     data = [
-        {'Metric': metric, 'Precision': score.precision, 'Recall': score.recall, 'F1-Score': score.fmeasure}
+        {' ': metric, 
+        #  'Precision': score.precision, 
+        #  'Recall': score.recall, 
+         'F1-Score': score.fmeasure}
         for metric, score in scores.items()
     ]
+    
     return pd.DataFrame(data)
 
 def bleu_evaluations(text, ref):
