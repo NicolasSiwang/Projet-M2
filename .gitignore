@@ -5,6 +5,7 @@ clean_data_txt_save/
 summaries/
 dataset_legal-pegasus/
 SCOTU_data_txt_save/
+target_analysis/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
