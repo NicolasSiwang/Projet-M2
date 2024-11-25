@@ -1,0 +1,4 @@
+test sur le dataset de papier
+Scores ROUGE : {'rouge1': 0.19312071985871937, 'rouge2': 0.035377010555837266, 'rougeL': 0.12731759040030205}
+
+test sur le dataset de scotus
