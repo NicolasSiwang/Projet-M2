@@ -136,7 +136,7 @@ def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal
         clusters[labels[i]].append(sentence.replace('\xa0', ' '))
                 
     silhouette_avg = silhouette_score(sentence_embeddings, labels)
-    print(f"Silhouette Score: {silhouette_avg}")
+    # print(f"Silhouette Score: {silhouette_avg}")
     
     # Filtrer les clusters de phrases très courtes
     def is_valid_cluster(cluster_sentences, min_length=5):
@@ -149,12 +149,19 @@ def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal
         for cluster_id, cluster_sentences in clusters.items()
         if is_valid_cluster(cluster_sentences)
     }
-
+    
     # Tokenization des clusters filtrés
-    tokenized_clusters = {
-        cluster_id: [word_tokenize(sentence) for sentence in cluster_sentences]
-        for cluster_id, cluster_sentences in filtered_clusters.items()
-    }
+    # tokenized_clusters = {
+    #     cluster_id: [word_tokenize(sentence) for sentence in cluster_sentences]
+    #     for cluster_id, cluster_sentences in filtered_clusters.items()
+    # }
+    
+    tokenized_clusters = {}
+    for cluster_id, cluster_sentences in filtered_clusters.items():
+        tokenized_sentences = []
+        for sentence in cluster_sentences:
+            tokenized_sentences.append(word_tokenize(sentence))
+        tokenized_clusters[cluster_id] = tokenized_sentences
 
     # Initialiser un modèle BM25 pour chaque cluster
     bm25_models = {
@@ -220,44 +227,63 @@ def contains_date_format(text):
     return bool(match)
 
 def is_title(text):
-    if text.strip() in ["I", "A"] :
+    """Is considered title every line that consists of a single capital letter or serie of underscore"""
+    if re.fullmatch(r"[A-Z]|_+", text.strip()):
         return True
+    else :
+        return False
     
-    return False
+def skip_titles(lines, next_index):
+    """Return the next sentence that is not a title or something like "1." """
+    next_line = lines[next_index]
+
+    while is_title(next_line) and next_index + 1 < len(lines) :
+        next_index += 1
+        next_line = lines[next_index]
+      
+    # avoid returning 1.  
+    if re.match(r"^\d+\.", next_line.strip()):
+        return sent_segmentation(next_line, "pySBD")[1]
+    return sent_segmentation(next_line, "pySBD")[0]
+
+def ends_with_syllabus(sentence):
+    return bool(re.search(r'\bsyllabus\b$', sentence, re.IGNORECASE))
+        
+def sentence_after_syllabus(sentence):
+    """Return the sentence following the word "syllabus" """
+    match = re.search(r'\bsyllabus\b', sentence, re.IGNORECASE)
+    if match:
+        return sentence[match.end():].strip()
+    else:
+        return sentence
 
 def select_query(text):
+    """Return a sentence relevent for BM25 query"""
     query = ""
     
     lines = text.split('\n')
     
     for i, line in enumerate(lines):
         line = line.strip()         
-        if line.startswith("No.") and i + 1 < len(lines):
-            if "Per Curiam" not in lines[i + 1].strip():
-                return sent_segmentation(lines[i + 1], "pySBD")[0]
-            elif i + 2 < len(lines):
-                return sent_segmentation(lines[i + 2], "pySBD")[0]
-        if "Syllabus" in line and i + 1 < len(lines):
-            query = lines[i + 1]
-            
-        # if there is a date like [Month day, year], we take :
-        # - the next line if it is not a title
-        # - else the line following the title
-            
+        # if there is a date like [Month day, year], we take the next line if it is not a title
         if contains_date_format(line) and i + 2 < len(lines):
-            next_index = i + 2
-            next_line = lines[next_index]
-            while is_title(next_line) and next_index < len(lines + 1) :
-                next_index += 1
-                next_line = lines[next_index]
-            
-                
-            if is_title(lines[i + 2]) and i + 3 < len(lines):
-                if lines[i + 3].strip() == "A" and i + 4 < len(lines):
-                    return sent_segmentation(lines[i + 4], "pySBD")[0]  
-                return sent_segmentation(lines[i + 3], "pySBD")[0]  
-            return sent_segmentation(lines[i + 2], "pySBD")[0]   
-    
+            return sentence_after_syllabus(skip_titles(lines, i+2))
+        
+        # if the sentence contains "No.", we return the next sentence by skipping "Per Curiam" and "Syllabus"
+        if "No." in line and i + 1 < len(lines):
+            if "Per Curiam" not in lines[i + 1].strip():
+                return sentence_after_syllabus(skip_titles(lines, i+1))
+            elif i + 2 < len(lines):
+                return sentence_after_syllabus(skip_titles(lines, i+2))
+        
+        # to not have the "Syllabus" conditions have the priority, store the query in a variable    
+        # if the line is "Syllabus", the query will be the next line's first sentence
+        if ("Syllabus" == line.strip() or ends_with_syllabus(line)) and i + 1 < len(lines):
+            query = lines[i + 1]
+        # if the line contains "syllabus", the query will be the next sentence
+        elif "syllabus" in line.lower():
+            query = sentence_after_syllabus(line)
+
     if query != "":
         return sent_segmentation(query, "pySBD")[0]
     else:
