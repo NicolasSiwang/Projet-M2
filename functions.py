@@ -2,25 +2,29 @@ from nltk.tokenize import sent_tokenize
 import spacy
 import custom_spacy as csp
 import pysbd
+
+from nltk.tokenize import word_tokenize
 from transformers import BertModel, BertTokenizer
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+from rank_bm25 import BM25Okapi
+from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from rank_bm25 import BM25Okapi
-from nltk.tokenize import word_tokenize
+
 from rouge_score import rouge_scorer
+from bert_score import BERTScorer
+import evaluate
+
 import pandas as pd
 import numpy as np
 import json
 import re
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-import evaluate
 
-def open_file(file_path, type):
-    
-    with open(file_path, 'r', encoding="utf-8") as f:
+from transformers import logging
+
+def open_file(file_path, type): 
+    with open(file_path, 'r', encoding="utf-8", errors='replace') as f:
         if (type == "json"):
             return json.load(f)
         elif (type == "txt"):
@@ -38,6 +42,7 @@ def sent_segmentation(document, method='nltk'):
     """
     if method == 'nltk':
         return sent_tokenize(document)
+    
     elif method == 'spacy':
         nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
         nlp.add_pipe("sentencizer") 
@@ -49,6 +54,7 @@ def sent_segmentation(document, method='nltk'):
             for sent in doc.sents:
                 sentences.append(sent.text)
         return sentences
+    
     elif method == 'custom_spacy':
         nlp = csp.custom_spacy_model()
         split_doc = split(document)
@@ -59,9 +65,11 @@ def sent_segmentation(document, method='nltk'):
             for sent in doc.sents:
                 sentences.append(sent.text)
         return sentences
+    
     elif method == 'pySBD':        
         seg = pysbd.Segmenter(language="en", clean=False)
         return seg.segment(document)
+    
     else:
         raise ValueError("Unsupported tokenization method. Choose 'nltk', 'spacy', or 'custom_spacy'.")
 
@@ -97,7 +105,7 @@ def PCA_kmeans_optimal_clusters(sentence_embeddings, max_clusters=7):
     silhouette_scores = []
     k_values = list(range(2, max_clusters + 1))
     
-    # Tester différents nombres de clusters
+    # Tester différents nombres dew clusters
     for k in k_values:
         kmeans = KMeans(n_clusters=k, random_state=0)
         labels = kmeans.fit_predict(reduced_embeddings)
@@ -117,10 +125,11 @@ def PCA_kmeans_optimal_clusters(sentence_embeddings, max_clusters=7):
     
     return optimal_k
 
-def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal rights"):
+def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal rights", limit_output=True):
     tokenizer = BertTokenizer.from_pretrained(model_name)
     model = BertModel.from_pretrained(model_name)
-    sentence_embeddings = get_sentence_embeddings(sentences, tokenizer, model)
+    unique_sentences = list(set(sentences))
+    sentence_embeddings = get_sentence_embeddings(unique_sentences, tokenizer, model)
 
     # Déterminer le nombre optimal de clusters
     n_clusters = PCA_kmeans_optimal_clusters(sentence_embeddings)
@@ -129,13 +138,15 @@ def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal
     kmeans.fit(sentence_embeddings)
 
     # Étiquettes des clusters
-    labels = kmeans.labels_
+    unique_labels = kmeans.labels_
+    sentence_to_label = {sentence: unique_labels[i] for i, sentence in enumerate(unique_sentences)}
     
     clusters = {i: [] for i in range(n_clusters)}
     for i, sentence in enumerate(sentences):
-        clusters[labels[i]].append(sentence.replace('\xa0', ' '))
+        label = sentence_to_label[sentence]
+        clusters[label].append(sentence.replace('\xa0', ' '))
                 
-    silhouette_avg = silhouette_score(sentence_embeddings, labels)
+    silhouette_avg = silhouette_score(sentence_embeddings, unique_labels)
     # print(f"Silhouette Score: {silhouette_avg}")
     
     # Filtrer les clusters de phrases très courtes
@@ -171,13 +182,26 @@ def bb25LegalSum(sentences, model_name="bert-base-uncased", query="law and legal
     
     tokenized_query = word_tokenize(query)
     best_sentences = []
+    total_tokens = 0
 
     for cluster_id, bm25 in bm25_models.items():
         # Récupérer les phrases les plus pertinentes pour la requête dans ce cluster
-        top_docs = bm25.get_top_n(tokenized_query, clusters[cluster_id], n=5)  # Use original sentences
+        top_docs = bm25.get_top_n(tokenized_query, clusters[cluster_id], n=10)  
 
-        # Add relevant sentences to the list
-        best_sentences.extend(top_docs)
+        for doc in top_docs:
+            token_count = len(word_tokenize(doc))
+            # Si le total de token ne dépasse pas 512, on ajoute la phrase
+            if total_tokens + token_count <= 512: 
+                best_sentences.append(doc)
+                # Limite la taille de sortie à sortie 512
+                if limit_output:
+                    total_tokens += token_count
+            else:
+                break
+
+        # Si le total de token dépasse 512, on s'arrête
+        if total_tokens >= 512:
+            break
             
     return best_sentences
 
@@ -198,6 +222,7 @@ def get_sentence_embeddings(sentences, tokenizer, model):
     return np.array(embeddings)
 
 def split(text, max_length=3530): 
+    """Split text into smaller chuncks and try to cut keep them as sentences"""
     split_text = text.split('\n')
     result = []
     
@@ -219,10 +244,9 @@ def split(text, max_length=3530):
     return result
 
 def contains_date_format(text):
-    # Define the regex pattern for [Month Day, Year]
+    """Search for date"""
     pattern = r'\[\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b\]'
     
-    # Search for the pattern in the text
     match = re.search(pattern, text)
     return bool(match)
 
@@ -247,6 +271,7 @@ def skip_titles(lines, next_index):
     return sent_segmentation(next_line, "pySBD")[0]
 
 def ends_with_syllabus(sentence):
+    """True if the sentences ends with syllabus"""
     return bool(re.search(r'\bsyllabus\b$', sentence, re.IGNORECASE))
         
 def sentence_after_syllabus(sentence):
@@ -288,26 +313,82 @@ def select_query(text):
         return sent_segmentation(query, "pySBD")[0]
     else:
         return "law and legal rights"
-    
-def evaluation(text, ref):
-    rouges = rouge_evaluations(text, ref)
-    
-def rouge_evaluations(text, ref):
+
+def rouge_evaluations(text, ref, f1_only=True):
+    """Return a dataframe for rouge scores"""
     scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
     scores = scorer.score(text, ref)
 
-    return rouge_to_df(scores)
+    if f1_only:
+        return {
+            'rouge1': scores['rouge1'].fmeasure,
+            'rouge2': scores['rouge2'].fmeasure,
+            'rougeL': scores['rougeL'].fmeasure,
+        }
+    else:
+        return {
+            'rouge1': scores['rouge1'],
+            'rouge2': scores['rouge2'],
+            'rougeL': scores['rougeL'],
+        }
 
-def rouge_to_df(scores):
-    data = [
-        {' ': metric, 
-        #  'Precision': score.precision, 
-        #  'Recall': score.recall, 
-         'F1-Score': score.fmeasure}
-        for metric, score in scores.items()
-    ]
+def bert_evaluation(summary, ref, f1_only=True):
+    """Return a dataframe for bert score"""
+    # Temporarily set verbosity to ERROR to suppress warnings
+    logging.set_verbosity_error()
+
+    try:
+        scorer = BERTScorer(lang="en")
+        precision, recall, f1 = scorer.score([summary], [ref])
+        
+        if f1_only:
+            return f1.mean().item()
+        else:
+            return [precision.mean().item(), recall.mean().item(), f1.mean().item()]
+    finally:
+        logging.set_verbosity_warning()
+        
+CLEANR = re.compile('<.*?>') 
+def cleanhtml(raw_html):
+    """Remove html tags"""
+    cleantext = re.sub(CLEANR, '', raw_html)
+    return cleantext
+
+def evaluations(text, ref, f1_only=True):
+    """Return the different metrics results \n
+        f1_only return only the f1_score of each metrics  """
+    ref = cleanhtml(ref)
+    rouges = rouge_evaluations(text, ref, f1_only)
+    bert = bert_evaluation(text, ref, f1_only)
     
-    return pd.DataFrame(data)
+    if f1_only:
+        data = {
+            'rouge1': [rouges['rouge1']],
+            'rouge2': [rouges['rouge2']],
+            'rougeL': [rouges['rougeL']],
+            'bert_score': [bert]
+        }
+        return pd.DataFrame(data)
+    else:
+        data = {
+            'rouge1_P': [rouges['rouge1'].precision],
+            'rouge1_R': [rouges['rouge1'].recall],
+            'rouge1_F1': [rouges['rouge1'].fmeasure],
+            
+            'rouge2_P': [rouges['rouge2'].precision],
+            'rouge2_R': [rouges['rouge2'].recall],
+            'rouge2_F1': [rouges['rouge2'].fmeasure],
+            
+            'rougeL_P': [rouges['rougeL'].precision],
+            'rougeL_R': [rouges['rougeL'].recall],
+            'rougeL_F1': [rouges['rougeL'].fmeasure],
+            
+            'bert_score_P': [bert[0]],
+            'bert_score_R': [bert[1]],
+            'bert_score_F1': [bert[2]]
+        }
+        
+        return pd.DataFrame(data)
 
 def bleu_evaluations(text, ref):
     metrics = {
@@ -327,7 +408,7 @@ def bleu_to_df(results):
 
 
 def highlight_html(full_text, extracts):
-    '''The extrats is a list of fragments of full_text. Highlight them in full_text, which is an HTML.'''
+    '''extracts is a list of fragments/sentences that will be highlighted in full_text, which is an HTML.'''
 
     highlighted_text = full_text
 
@@ -359,7 +440,7 @@ def highlight_html(full_text, extracts):
     return highlighted_text
 
 def highlight_text(full_text, extracts):
-    '''The extrats is a list of fragments of full_text. Highlight them in full_text, which is a text.'''
+    '''The extrats is a list of fragments/sentences that will be highlighted in full_text, which is a text.'''
 
     # Highlight occurrences of each extract in the full text
     highlighted_text = full_text
