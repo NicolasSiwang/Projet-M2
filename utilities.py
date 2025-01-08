@@ -14,7 +14,7 @@ def get_root_path():
 
     change the path variable to the path of the dataset
     '''
-    path = "dataset_legal-pegasus/dataset"
+    path = "/dataset_legal-pegasus/dataset"
     return path
 
 def get_summary_data(dataset, train):
@@ -38,8 +38,10 @@ def get_summary_data(dataset, train):
                 data_source.append(a)
         return names, data_source, []
     
-    path = get_root_path() + '/Summary-Data-' + dataset + '/' + train + '-data/judgement'
+    path = get_root_path() + dataset + '-Abs' + '/' + train + '-data/judgement' # dataset_legal-pegasus\dataset\UK-Abs\test-data\judgement
+    print(path)
     all_files = glob.glob(path + "/*.txt")
+    print(all_files)
     data_source = []
     names = []
     for filename in all_files:
@@ -48,8 +50,10 @@ def get_summary_data(dataset, train):
             names.append(filename[p+1:])
             a = f.read()
             data_source.append(a)
-    path = get_root_path() + '/Summary-Data-' + dataset + '/' + train + '-data/summary'
+    path = get_root_path() + dataset + '-Abs' + '/' + train + '-data/summary/full' # dataset_legal-pegasus\dataset\UK-Abs\test-data\summary\full
+    print(path)
     all_files = glob.glob(path + "/*.txt")
+    print(all_files)[:10]
     data_summary = []
     for filename in all_files:
         with open(filename, 'r') as f: 
