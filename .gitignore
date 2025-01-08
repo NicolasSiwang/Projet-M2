@@ -2,8 +2,7 @@ SCOTUS/
 models/
 summaries/
 dataset_legal-pegasus/
-SCOTUS_data/
-target_analysis/
+SCOTU_data_txt_save/
 resultats/
 
 # Byte-compiled / optimized / DLL files
