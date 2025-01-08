@@ -9,6 +9,7 @@ nltk
 pysbd
 transformers
 rouge-score
+bert_score
 torch
 evaluate
 datasets
