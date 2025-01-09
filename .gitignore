@@ -3,7 +3,10 @@ models/
 summaries/
 dataset_legal-pegasus/
 SCOTU_data_txt_save/
+SCOTUS_data/
 resultats/
+# summary words not in text
+target_analysis/   
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
