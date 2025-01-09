@@ -2,9 +2,9 @@ SCOTUS/
 models/
 summaries/
 dataset_legal-pegasus/
-SCOTU_data_txt_save/
 SCOTUS_data/
 resultats/
+archive/
 # summary words not in text
 target_analysis/   
 
