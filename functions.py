@@ -314,16 +314,16 @@ def select_query(text):
     else:
         return "law and legal rights"
 
-def rouge_evaluations(text, ref, f1_only=True):
+def rouge_evaluations(text, ref, short=True):
     """Return a dataframe for rouge scores"""
     scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
     scores = scorer.score(text, ref)
 
-    if f1_only:
+    if short:
         return {
-            'rouge1': scores['rouge1'].fmeasure,
-            'rouge2': scores['rouge2'].fmeasure,
-            'rougeL': scores['rougeL'].fmeasure,
+            'rouge1': scores['rouge1'].recall,
+            'rouge2': scores['rouge2'].recall,
+            'rougeL': scores['rougeL'].recall,
         }
     else:
         return {
@@ -332,7 +332,7 @@ def rouge_evaluations(text, ref, f1_only=True):
             'rougeL': scores['rougeL'],
         }
 
-def bert_evaluation(summary, ref, f1_only=True):
+def bert_evaluation(summary, ref, short=True):
     """Return a dataframe for bert score"""
     # Temporarily set verbosity to ERROR to suppress warnings
     logging.set_verbosity_error()
@@ -341,7 +341,7 @@ def bert_evaluation(summary, ref, f1_only=True):
         scorer = BERTScorer(lang="en")
         precision, recall, f1 = scorer.score([summary], [ref])
         
-        if f1_only:
+        if short:
             return f1.mean().item()
         else:
             return [precision.mean().item(), recall.mean().item(), f1.mean().item()]
@@ -354,14 +354,14 @@ def cleanhtml(raw_html):
     cleantext = re.sub(CLEANR, '', raw_html)
     return cleantext
 
-def evaluations(text, ref, f1_only=True):
+def evaluations(text, ref, short=True):
     """Return the different metrics results \n
-        f1_only return only the f1_score of each metrics  """
+        if short, return only the recall of rouge and f1_score of bert_score  """
     ref = cleanhtml(ref)
-    rouges = rouge_evaluations(text, ref, f1_only)
-    bert = bert_evaluation(text, ref, f1_only)
+    rouges = rouge_evaluations(text, ref, short)
+    bert = bert_evaluation(text, ref, short)
     
-    if f1_only:
+    if short:
         data = {
             'rouge1': [rouges['rouge1']],
             'rouge2': [rouges['rouge2']],
@@ -459,3 +459,53 @@ def highlight_text(full_text, extracts):
                                     highlighted_text[end_index:])
 
     return highlighted_text
+
+def highlight_min_max(df, only_f1=True):
+    """Highlight for results"""
+    styles = pd.DataFrame('', index=df.index, columns=df.columns)
+
+    # Appliquer le style pour les colonnes 'Precision', 'Recall', 'F1-Score'
+    if only_f1:
+        columns = ['rouge1', 'rouge2', 'rougeL', 'bert_score'] 
+    else:
+        columns = ['rouge1_F1', 'rouge2_F1', 'rougeL_F1', 'bert_score_F1'] 
+        
+    for col in columns:
+        # Top 3 maximums et minimums
+        top_3_max = df[col].nlargest(3)
+        top_3_min = df[col].nsmallest(3)
+
+        # Appliquer le dégradé rouge pour les min
+        for i in df.index:
+            if df[col].iloc[i] in top_3_min.values:
+                rank = top_3_min.rank()[top_3_min == df[col].iloc[i]].values[0]
+                alpha = 1 - (rank - 1) / 3  
+                styles.loc[i, col]= f'background-color: rgba(200, 50, 50, {alpha});'
+
+        # Appliquer le dégradé vert pour les max
+        for i in df.index:
+            if df[col].iloc[i] in top_3_max.values:
+                rank = top_3_max.rank(ascending=False)[top_3_max == df[col].iloc[i]].values[0]
+                alpha = 1 - (rank - 1) / 3
+                styles.loc[i, col]= f'background-color: rgba(50, 200, 50, {alpha});'
+
+    # Pour la colonne 'Execution time', inverser les couleurs (max en rouge, min en vert)
+    col = 'Execution time'
+    top_3_max = df[col].nlargest(3)
+    top_3_min = df[col].nsmallest(3)
+
+    # Appliquer le dégradé vert pour les min
+    for i in df.index:
+        if df[col].iloc[i] in top_3_min.values:
+            rank = top_3_min.rank()[top_3_min == df[col].iloc[i]].values[0]
+            alpha = 1 - (rank - 1) / 3 
+            styles.loc[i, col]= f'background-color: rgba(50, 200, 50, {alpha});'
+
+    # Appliquer le dégradé rouge pour les max
+    for i in df.index:
+        if df[col].iloc[i] in top_3_max.values:
+            rank = top_3_max.rank(ascending=False)[top_3_max == df[col].iloc[i]].values[0]
+            alpha = 1 - (rank - 1) / 3 
+            styles.loc[i, col]= f'background-color: rgba(200, 50, 50, {alpha});'
+            
+    return styles
