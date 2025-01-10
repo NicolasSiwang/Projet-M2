@@ -5,6 +5,7 @@ dataset_legal-pegasus/
 SCOTUS_data/
 resultats/
 archive/
+output/
 # summary words not in text
 target_analysis/   
 
