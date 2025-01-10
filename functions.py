@@ -30,7 +30,7 @@ def open_file(file_path, type):
         elif (type == "txt"):
             return f.read()
 
-def sent_segmentation(document, method='nltk'):
+def sent_segmentation(document, method='pySBD'):
     """Segmentation of the document as sentences using the specified method.
     
     Args:
