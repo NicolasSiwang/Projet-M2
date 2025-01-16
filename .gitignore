@@ -5,7 +5,8 @@ dataset_legal-pegasus/
 SCOTUS_data/
 resultats/
 archive/
-output/
+/**/output/results*.csv
+
 # summary words not in text
 target_analysis/   
 
