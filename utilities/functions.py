@@ -439,26 +439,50 @@ def highlight_html(full_text, extracts):
 
     return highlighted_text
 
-def highlight_text(full_text, extracts):
-    '''The extrats is a list of fragments/sentences that will be highlighted in full_text, which is a text.'''
+def highlight_text(text1, text2):
+    '''Highlight text1's words that are in common with text2. Consecutive words in common are grouped into a single span.'''
+    import re
+    from nltk.stem import WordNetLemmatizer
+    from nltk.corpus import wordnet
 
-    # Highlight occurrences of each extract in the full text
-    highlighted_text = full_text
-    for extract in extracts:
-        if extract:
-            # This pattern handles the case where extracts may include new lines or spaces
-            pattern = re.escape(extract).replace(r'\ ', r'\s*')  # Allow for variable whitespace
-            
-            # Use re.search to find the first occurrence
-            match = re.search(pattern, highlighted_text, flags=re.IGNORECASE)
-            if match:
-                start_index, end_index = match.span()
-                # Highlight the first occurrence
-                highlighted_text = (highlighted_text[:start_index] +
-                                    f'<span style="background-color: yellow; color: black;">{highlighted_text[start_index:end_index]}</span>' +
-                                    highlighted_text[end_index:])
+    lemmatizer = WordNetLemmatizer()
 
-    return highlighted_text
+    def lemmatize_word(word):
+        return lemmatizer.lemmatize(word.lower())
+    
+    def split_with_punctuation(text):
+        return re.findall(r"\b\w+\b|[^\w\s]", text)
+
+    # Tokenize text1 and lemmatize words from text2
+    tokens1 = split_with_punctuation(text1)
+    words2 = set(lemmatize_word(word) for word in re.findall(r'\b\w+\b', text2))
+    
+    highlighted_text = []
+    temp_span = []  # Temporary list to hold consecutive matches
+    
+    for token in tokens1:
+        if re.match(r'\b\w+\b', token) and lemmatize_word(token) in words2:
+            # If the token matches, add it to the temporary span
+            temp_span.append(token)
+        else:
+            # If a match streak ends, close the span and reset temp_span
+            if temp_span:
+                highlighted_text.append(
+                    f"<span style='background-color: yellow; color: black;'>{' '.join(temp_span)}</span>"
+                )
+                temp_span = []
+            # Add the non-matching token
+            highlighted_text.append(token)
+    
+    # Close any remaining span
+    if temp_span:
+        highlighted_text.append(
+            f"<span style='background-color: yellow; color: black;'>{' '.join(temp_span)}</span>"
+        )
+
+    # Join the tokens back into a string
+    return ' '.join(highlighted_text)
+
 
 def highlight_min_max(df, only_f1=True):
     """Highlight for results"""
