@@ -439,24 +439,25 @@ def highlight_html(full_text, extracts):
 
     return highlighted_text
 
-def highlight_text(full_text, extracts):
-    '''The extrats is a list of fragments/sentences that will be highlighted in full_text, which is a text.'''
+def highlight_text(text1, text2):
+    '''Highlight text1's words that are in common with text2. \n
+    Use nltk to lemmatize the words'''
+    from nltk.stem import WordNetLemmatizer
+    from nltk.corpus import wordnet
+    lemmatizer = WordNetLemmatizer()
+    def lemmatize_word(word):
+        return lemmatizer.lemmatize(word.lower())
+    def split_with_punctuation(text):
+        return re.findall(r"\b\w+\b|[^\w\s]", text)
 
-    # Highlight occurrences of each extract in the full text
-    highlighted_text = full_text
-    for extract in extracts:
-        if extract:
-            # This pattern handles the case where extracts may include new lines or spaces
-            pattern = re.escape(extract).replace(r'\ ', r'\s*')  # Allow for variable whitespace
-            
-            # Use re.search to find the first occurrence
-            match = re.search(pattern, highlighted_text, flags=re.IGNORECASE)
-            if match:
-                start_index, end_index = match.span()
-                # Highlight the first occurrence
-                highlighted_text = (highlighted_text[:start_index] +
-                                    f'<span style="background-color: yellow; color: black;">{highlighted_text[start_index:end_index]}</span>' +
-                                    highlighted_text[end_index:])
+    tokens1 = split_with_punctuation(text1)
+    words2 = set(lemmatize_word(word) for word in re.findall(r'\b\w+\b', text2)) 
+    
+    highlighted_text = ' '.join(
+        f"<span style='background-color: yellow; color: black;'>{token}</span>" 
+        if re.match(r'\b\w+\b', token) and lemmatize_word(token) in words2 else token
+        for token in tokens1
+    )
 
     return highlighted_text
 
